@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive Image Adjustment</title>
+    <style>
+        #imagesContainer img {
+            width: 45%; /* Adjust the image display width */
+            vertical-align: top;
+        }
+        #imagesContainer {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload and Adjust Image Borders</h1>
+    <label>选择当前倍率:
+        <select id="magnification1">
+            <option value="5">5x</option>
+            <option value="10">10x</option>
+            <option value="20">20x</option>
+            <option value="50">50x</option>
+        </select>
+    </label>
+    <br>
+    <label>选择目标倍率:
+        <select id="magnification2">
+            <option value="5">5x</option>
+            <option value="10">10x</option>
+            <option value="20">20x</option>
+            <option value="50">50x</option>
+        </select>
+    </label>
+    <input type="file" id="imageInput" accept="image/jpeg">
+    <button onclick="uploadImage()">Upload Image</button>
+    <br><br>
+    <div id="sliderContainer">
+        <label>Area Threshold: <span id="areaThreshValue">3000</span></label>
+        <input type="range" id="threshSlider" min="0" max="200000" value="3000" onchange="debouncedUpdateImage()">
+        <br>
+        <label>Top Border: <span id="topBorderValue">150</span></label>
+        <input type="range" id="topBorderSlider" min="0" max="400" value="150" onchange="debouncedUpdateImage()">
+        <br>
+        <label>Bottom Border: <span id="bottomBorderValue">150</span></label>
+        <input type="range" id="bottomBorderSlider" min="0" max="400" value="150" onchange="debouncedUpdateImage()">
+        <br>
+        <label>Left Border: <span id="leftBorderValue">150</span></label>
+        <input type="range" id="leftBorderSlider" min="0" max="400" value="150" onchange="debouncedUpdateImage()">
+        <br>
+        <label>Right Border: <span id="rightBorderValue">150</span></label>
+        <input type="range" id="rightBorderSlider" min="0" max="400" value="150" onchange="debouncedUpdateImage()">
+    </div>
+    <button onclick="downloadMatrix()">Output matrix</button>
+    <div id="imagesContainer">
+        <img id="originalImage" src="" alt="Original Image will appear here...">
+        <img id="processedImage" src="" alt="Processed Image will appear here...">
+    </div>
+    <script>
+        let fileID = '';
+        let debounceTimer;
+    
+        function uploadImage() {
+            const fileInput = document.getElementById('imageInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select a file first.");
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // Set the maximum values for the sliders based on the image dimensions
+                    document.getElementById('topBorderSlider').max = this.height;
+                    document.getElementById('bottomBorderSlider').max = this.height;
+                    document.getElementById('leftBorderSlider').max = this.width;
+                    document.getElementById('rightBorderSlider').max = this.width;
+    
+                    // Update the displayed maximum values next to sliders
+                    document.getElementById('topBorderValue').innerText = this.height;
+                    document.getElementById('bottomBorderValue').innerText = this.height;
+                    document.getElementById('leftBorderValue').innerText = this.width;
+                    document.getElementById('rightBorderValue').innerText = this.width;
+    
+                    
+                    const magnification1 = document.getElementById('magnification1').value;
+                    const magnification2 = document.getElementById('magnification2').value;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('magnification1', magnification1);
+                    formData.append('magnification2', magnification2);
+    
+                    fetch('/upload-image/', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        fileID = data.file_id;
+                        document.getElementById('originalImage').src = '/static/images/' + fileID + '.jpg';
+                        updateImage(); // Process initial image with default settings
+                    })
+                    .catch(error => console.error('Error:', error));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    
+        function updateImage() {
+            const areaThresh = document.getElementById('threshSlider').value;
+            const borderTop = document.getElementById('topBorderSlider').value;
+            const borderBottom = document.getElementById('bottomBorderSlider').value;
+            const borderLeft = document.getElementById('leftBorderSlider').value;
+            const borderRight = document.getElementById('rightBorderSlider').value;
+            const magnification1 = document.getElementById('magnification1').value;
+            const magnification2 = document.getElementById('magnification2').value;
+    
+            const formData = new FormData();
+            formData.append('file_id', fileID);
+            formData.append('area_thresh', areaThresh);
+            formData.append('border_up', borderTop);
+            formData.append('border_down', borderBottom);
+            formData.append('border_left', borderLeft);
+            formData.append('border_right', borderRight);
+            formData.append('magnification1', magnification1);
+            formData.append('magnification2', magnification2);
+    
+            fetch('/process-image/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('processedImage').src = 'data:image/png;base64,' + data.processed;
+                window.matrixLink = data.matrix_file;
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    
+        function updateSliderValues() {
+            const areaThresh = document.getElementById('threshSlider').value;
+            document.getElementById('areaThreshValue').innerText = areaThresh;
+
+            const borderTop = document.getElementById('topBorderSlider').value;
+            document.getElementById('topBorderValue').innerText = borderTop;
+
+            const borderBottom = document.getElementById('bottomBorderSlider').value;
+            document.getElementById('bottomBorderValue').innerText = borderBottom;
+
+            const borderLeft = document.getElementById('leftBorderSlider').value;
+            document.getElementById('leftBorderValue').innerText = borderLeft;
+
+            const borderRight = document.getElementById('rightBorderSlider').value;
+            document.getElementById('rightBorderValue').innerText = borderRight;
+        }
+
+        function debouncedUpdateImage() {
+            updateSliderValues(); // Update the slider values whenever the slider moves
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(updateImage, 500); // Delay the update call by 500 ms
+        }
+
+        // Initial call to set slider values on page load
+        updateSliderValues();
+
+        function downloadMatrix() {
+            if (window.matrixLink) {
+                window.open(window.matrixLink, '_blank');
+            } else {
+                alert("Please process an image first.");
+            }
+        }
+    </script>
+    
+</body>
+</html>
